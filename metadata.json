@@ -1,0 +1,6 @@
+{
+  "name": "The Mourtada's Trading - Produce Dealer",
+  "description": "Realtime agricultural produce trading platform, digital weigh-scale intake, quality grading, and live commodity exchange for The Mourtada's Trading in Bo City.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
