@@ -11,7 +11,16 @@ import { FarmerLedger } from './components/FarmerLedger';
 import { MarketplaceOrderBook } from './components/MarketplaceOrderBook';
 import { HonestyVoucherModal } from './components/HonestyVoucherModal';
 import { ContactDepotModal } from './components/ContactDepotModal';
-import { ShieldCheck, Phone, MapPin, Scale, Award, Sparkles, TrendingUp, Warehouse, Clock, BellRing, X, ArrowUpRight } from 'lucide-react';
+import { SystemLogo } from './components/SystemLogo';
+import { 
+  loadCachedCommodities, 
+  saveCachedCommodities, 
+  loadCachedInventory, 
+  saveCachedInventory, 
+  loadCachedBills, 
+  saveCachedBills 
+} from './utils/offlineStorage';
+import { ShieldCheck, Phone, MapPin, Scale, Award, Sparkles, TrendingUp, Warehouse, Clock, BellRing, X, ArrowUpRight, WifiOff, CheckCircle2 } from 'lucide-react';
 
 const INITIAL_ALERTS: PriceAlert[] = [
   {
@@ -39,17 +48,20 @@ const INITIAL_ALERTS: PriceAlert[] = [
 export default function App() {
   const [currentTab, setCurrentTab] = useState<string>('exchange');
   const [currency, setCurrency] = useState<Currency>('NLe');
-  const [commodities, setCommodities] = useState<Commodity[]>(INITIAL_COMMODITIES);
   
-  // Stored Bills
-  const [bills, setBills] = useState<WeighIntakeBill[]>(() => {
-    try {
-      const saved = localStorage.getItem('mourtada_bills_v1');
-      return saved ? JSON.parse(saved) : INITIAL_INTAKE_BILLS;
-    } catch {
-      return INITIAL_INTAKE_BILLS;
-    }
+  // Offline connectivity state
+  const [isOnline, setIsOnline] = useState<boolean>(() => {
+    return typeof navigator !== 'undefined' && typeof navigator.onLine === 'boolean' ? navigator.onLine : true;
   });
+
+  // Cached Commodities (Bo City Offline Resilience)
+  const [commodities, setCommodities] = useState<Commodity[]>(() => loadCachedCommodities());
+  
+  // Cached Inventory (Bo City Offline Resilience)
+  const [inventory, setInventory] = useState<DepotInventoryItem[]>(() => loadCachedInventory());
+
+  // Cached Bills / Intake Records (Bo City Offline Resilience)
+  const [bills, setBills] = useState<WeighIntakeBill[]>(() => loadCachedBills());
 
   // Stored Price Alerts
   const [alerts, setAlerts] = useState<PriceAlert[]>(() => {
@@ -75,20 +87,48 @@ export default function App() {
     timestamp: string;
   } | null>(null);
 
-  const [inventory, setInventory] = useState<DepotInventoryItem[]>(INITIAL_INVENTORY);
+  const [cacheSyncNotice, setCacheSyncNotice] = useState<string | null>(null);
   const [activeVoucher, setActiveVoucher] = useState<WeighIntakeBill | null>(null);
   const [isContactModalOpen, setIsContactModalOpen] = useState<boolean>(false);
   const [selectedCommodityForScale, setSelectedCommodityForScale] = useState<Commodity | null>(null);
   const [aiInspectCommodity, setAiInspectCommodity] = useState<Commodity | null>(null);
 
-  // Save bills to localStorage
+  // Network online/offline event listeners
   useEffect(() => {
-    try {
-      localStorage.setItem('mourtada_bills_v1', JSON.stringify(bills));
-    } catch {
-      // ignore
-    }
+    const handleOnline = () => {
+      setIsOnline(true);
+      setCacheSyncNotice('Network Restored • Bo Depot Live Synced');
+      setTimeout(() => setCacheSyncNotice(null), 4000);
+    };
+    const handleOffline = () => {
+      setIsOnline(false);
+      setCacheSyncNotice('Internet Connection Dropped • Bo Offline Cache Active');
+      setTimeout(() => setCacheSyncNotice(null), 5000);
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // Save bills to offline storage
+  useEffect(() => {
+    saveCachedBills(bills);
   }, [bills]);
+
+  // Save inventory to offline storage
+  useEffect(() => {
+    saveCachedInventory(inventory);
+  }, [inventory]);
+
+  // Save commodities to offline storage
+  useEffect(() => {
+    saveCachedCommodities(commodities);
+  }, [commodities]);
 
   // Save alerts to localStorage
   useEffect(() => {
@@ -98,6 +138,14 @@ export default function App() {
       // ignore
     }
   }, [alerts]);
+
+  const handleSyncCacheManual = () => {
+    saveCachedCommodities(commodities);
+    saveCachedInventory(inventory);
+    saveCachedBills(bills);
+    setCacheSyncNotice('Bo Depot Snapshot Cached for Offline Operation');
+    setTimeout(() => setCacheSyncNotice(null), 3000);
+  };
 
   const handleRequestNotificationPermission = async () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -115,7 +163,7 @@ export default function App() {
       try {
         new Notification(title, {
           body,
-          icon: '/favicon.ico',
+          icon: '/logo.svg',
         });
       } catch (err) {
         console.warn('Web notification error:', err);
@@ -131,7 +179,6 @@ export default function App() {
     };
     setAlerts((prev) => [created, ...prev]);
 
-    // Request notification permission if not yet granted
     if (notificationPermission === 'default') {
       handleRequestNotificationPermission();
     }
@@ -206,7 +253,6 @@ export default function App() {
 
       if (isThresholdMet) {
         const timeNow = new Date().toLocaleTimeString();
-        // Check if recently triggered to avoid repeating every 4s
         if (alert.lastTriggeredAt !== timeNow) {
           const title = `🚨 Target Hit: ${alert.commodityName}`;
           const body = `Spot price reached ${alert.currency} ${currentPrice.toFixed(2)}/kg (${alert.condition === 'ABOVE' ? 'risen above' : 'dropped below'} target ${alert.currency} ${alert.targetPrice.toFixed(2)}).`;
@@ -219,7 +265,6 @@ export default function App() {
             timestamp: timeNow,
           });
 
-          // Mark alert with timestamp
           setAlerts((prev) =>
             prev.map((a) =>
               a.id === alert.id ? { ...a, lastTriggeredAt: timeNow } : a
@@ -230,6 +275,7 @@ export default function App() {
     });
   }, [commodities, alerts]);
 
+  // Handle Scale Intake Bill
   const handleIntakeCompleted = (newBill: WeighIntakeBill) => {
     setBills((prev) => [newBill, ...prev]);
 
@@ -248,6 +294,20 @@ export default function App() {
         return inv;
       })
     );
+  };
+
+  // Admin Save Record (Add or Update)
+  const handleSaveRecord = (bill: WeighIntakeBill, isNew: boolean) => {
+    if (isNew) {
+      setBills((prev) => [bill, ...prev]);
+    } else {
+      setBills((prev) => prev.map((b) => (b.id === bill.id ? bill : b)));
+    }
+  };
+
+  // Admin Delete Record
+  const handleDeleteRecord = (billId: string) => {
+    setBills((prev) => prev.filter((b) => b.id !== billId));
   };
 
   const handleSelectCommodityForScale = (c: Commodity) => {
@@ -281,6 +341,8 @@ export default function App() {
           setSelectedCommodityForScale(null);
           setCurrentTab('weighbridge');
         }}
+        isOnline={isOnline}
+        onSyncCache={handleSyncCacheManual}
       />
 
       {/* Real-time Marquee Ticker */}
@@ -289,6 +351,24 @@ export default function App() {
         currency={currency}
         onSelectCommodity={handleSelectCommodityForScale}
       />
+
+      {/* Cache Sync Status Notification */}
+      {cacheSyncNotice && (
+        <div className="max-w-7xl w-full mx-auto px-4 pt-2">
+          <div className="bg-slate-900 text-white rounded-lg p-2.5 text-xs flex items-center justify-between shadow-md">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 text-green-400" />
+              <span>{cacheSyncNotice}</span>
+            </div>
+            <button
+              onClick={() => setCacheSyncNotice(null)}
+              className="text-slate-400 hover:text-white text-xs px-2 py-0.5"
+            >
+              &times;
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Triggered Push Notification In-App Toast Banner */}
       {activeAlertBanner && (
@@ -383,8 +463,12 @@ export default function App() {
           <FarmerLedger
             bills={bills}
             currency={currency}
+            commodities={commodities}
             onViewVoucher={(bill) => setActiveVoucher(bill)}
             onQuickIntake={() => setCurrentTab('weighbridge')}
+            onSaveRecord={handleSaveRecord}
+            onDeleteRecord={handleDeleteRecord}
+            isOnline={isOnline}
           />
         )}
 
@@ -399,14 +483,12 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer with Official Logo */}
       <footer className="mt-12 bg-white border-t border-[#E5E7EB] py-8 px-4 text-xs text-[#6B7280]">
         <div className="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-4 gap-6">
           <div className="space-y-2">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-lg bg-[#2563EB] flex items-center justify-center font-bold text-white text-xs font-mono shadow-sm">
-                MT
-              </div>
+              <SystemLogo size={36} className="shrink-0 drop-shadow-xs" />
               <span className="font-bold text-[#111827] uppercase text-sm tracking-tight">
                 THE MOURTADA'S TRADING
               </span>
@@ -464,16 +546,16 @@ export default function App() {
                 Scale Intake
               </button>
               <button
-                onClick={() => setCurrentTab('ai-grader')}
+                onClick={() => setCurrentTab('farmers')}
                 className="px-3 py-1.5 bg-white hover:bg-[#F9FAFB] text-[#374151] font-semibold rounded-lg border border-[#E5E7EB] shadow-sm text-xs transition-colors"
               >
-                AI Grader
+                Farmer Ledger
               </button>
               <button
                 onClick={() => setIsContactModalOpen(true)}
                 className="px-3 py-1.5 bg-white hover:bg-[#F9FAFB] text-[#374151] font-semibold rounded-lg border border-[#E5E7EB] shadow-sm text-xs transition-colors"
               >
-                Depot Map
+                Depot Desk
               </button>
             </div>
           </div>

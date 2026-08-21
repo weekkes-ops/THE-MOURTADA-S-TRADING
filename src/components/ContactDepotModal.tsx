@@ -1,5 +1,6 @@
 import React from 'react';
 import { Phone, MapPin, Mail, Clock, ShieldCheck, X, MessageSquare, ExternalLink } from 'lucide-react';
+import { SystemLogo } from './SystemLogo';
 
 interface ContactDepotModalProps {
   isOpen: boolean;
@@ -18,9 +19,7 @@ export const ContactDepotModal: React.FC<ContactDepotModalProps> = ({
         {/* Header */}
         <div className="flex justify-between items-start border-b border-[#E5E7EB] pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-[#2563EB] font-mono text-lg shadow-xs">
-              MT
-            </div>
+            <SystemLogo size={48} className="shrink-0" />
             <div>
               <h3 className="text-lg font-bold text-[#111827] uppercase tracking-tight">
                 THE MOURTADA'S TRADING

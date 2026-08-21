@@ -1,6 +1,7 @@
 import React from 'react';
 import { WeighIntakeBill } from '../types';
 import { Printer, Download, CheckCircle2, ShieldCheck, X, Share2, Phone, MapPin, Mail } from 'lucide-react';
+import { SystemLogo } from './SystemLogo';
 
 interface HonestyVoucherModalProps {
   bill: WeighIntakeBill | null;
@@ -73,10 +74,8 @@ Phone: 072803080 / 077803080
           {/* Slip Header matching Business Card */}
           <div className="border-b-2 border-dashed border-[#E5E7EB] pb-5 text-center relative">
             <div className="flex items-center justify-center gap-3 mb-2">
-              {/* MT Logo Crest */}
-              <div className="w-12 h-12 rounded-xl bg-blue-50 border border-blue-200 flex items-center justify-center font-bold text-[#2563EB] font-mono text-lg shadow-xs">
-                MT
-              </div>
+              {/* Official Seal Emblem */}
+              <SystemLogo size={54} className="shrink-0" />
               <div className="text-left">
                 <h1 className="text-xl md:text-2xl font-bold text-[#111827] uppercase tracking-tight">
                   THE MOURTADA'S TRADING
